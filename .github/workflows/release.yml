@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号，例如 1.0.0 或 v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - name: Normalize and validate version
+        id: version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "版本号必须是 1.2.3 或 v1.2.3 格式" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Test and vet
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Check tag alignment
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            TAG_COMMIT="$(git rev-list -n 1 "${TAG}")"
+            if [[ "${TAG_COMMIT}" != "${GITHUB_SHA}" ]]; then
+              echo "标签 ${TAG} 已指向 ${TAG_COMMIT}，不是当前提交 ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+          else
+            git tag "${TAG}" "${GITHUB_SHA}"
+            git push origin "${TAG}"
+          fi
+
+      - name: Build Linux release archives
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p dist
+          for ARCH in amd64 arm64; do
+            WORK="dist/linux_${ARCH}"
+            mkdir -p "${WORK}"
+            CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              -o "${WORK}/cfsync" ./cmd/cfsync
+            cp README.md LICENSE "${WORK}/"
+            tar -C "${WORK}" -czf "dist/cfsync_${VERSION}_linux_${ARCH}.tar.gz" cfsync README.md LICENSE
+          done
+          cd dist
+          sha256sum cfsync_${VERSION}_linux_*.tar.gz > checksums.txt
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          ASSETS=(dist/cfsync_*.tar.gz dist/checksums.txt)
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${ASSETS[@]}" --clobber
+          else
+            gh release create "${TAG}" "${ASSETS[@]}" --verify-tag --generate-notes --title "${TAG}"
+          fi
+

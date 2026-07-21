@@ -1,0 +1,6 @@
+/.cache/
+/dist/
+/cfsync
+/cfsync.exe
+*.tmp
+
