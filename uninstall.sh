@@ -2,14 +2,13 @@
 set -Eeuo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
-  printf '请使用 sudo bash uninstall.sh，或直接运行 sudo cfsync uninstall\n' >&2
+  printf '请使用 sudo bash uninstall.sh，或直接运行 sudo cf uninstall\n' >&2
   exit 1
 fi
 
-if ! command -v cfsync >/dev/null 2>&1; then
-  printf '未找到 cfsync，请手动检查 /usr/local/bin/cfsync。\n' >&2
+if ! command -v cf >/dev/null 2>&1; then
+  printf '未找到 cf，请手动检查 /usr/local/bin/cf。\n' >&2
   exit 1
 fi
 
-exec cfsync uninstall </dev/tty >/dev/tty 2>&1
-
+exec cf uninstall </dev/tty >/dev/tty 2>&1

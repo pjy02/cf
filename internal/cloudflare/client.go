@@ -101,7 +101,7 @@ func (c *Client) ListARecords(ctx context.Context, zoneID, hostname string) ([]R
 func (c *Client) CreateARecord(ctx context.Context, zoneID, hostname, ip string, ttl int) (Record, error) {
 	body := map[string]any{
 		"type": "A", "name": hostname, "content": ip, "ttl": ttl,
-		"proxied": false, "comment": "managed by cfsync (github.com/pjy02/cf)",
+		"proxied": false, "comment": "managed by cf (github.com/pjy02/cf)",
 	}
 	var record Record
 	path := fmt.Sprintf("/zones/%s/dns_records", url.PathEscape(zoneID))
@@ -114,7 +114,7 @@ func (c *Client) CreateARecord(ctx context.Context, zoneID, hostname, ip string,
 func (c *Client) UpdateARecord(ctx context.Context, zoneID, recordID, hostname, ip string, ttl int) (Record, error) {
 	body := map[string]any{
 		"type": "A", "name": hostname, "content": ip, "ttl": ttl,
-		"proxied": false, "comment": "managed by cfsync (github.com/pjy02/cf)",
+		"proxied": false, "comment": "managed by cf (github.com/pjy02/cf)",
 	}
 	var record Record
 	path := fmt.Sprintf("/zones/%s/dns_records/%s", url.PathEscape(zoneID), url.PathEscape(recordID))

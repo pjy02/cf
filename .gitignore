@@ -2,5 +2,6 @@
 /dist/
 /cfsync
 /cfsync.exe
+/cf
+/cf.exe
 *.tmp
-

@@ -72,12 +72,12 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" go build \
               -trimpath \
               -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              -o "${WORK}/cfsync" ./cmd/cfsync
+              -o "${WORK}/cf" ./cmd/cfsync
             cp README.md LICENSE "${WORK}/"
-            tar -C "${WORK}" -czf "dist/cfsync_${VERSION}_linux_${ARCH}.tar.gz" cfsync README.md LICENSE
+            tar -C "${WORK}" -czf "dist/cf_${VERSION}_linux_${ARCH}.tar.gz" cf README.md LICENSE
           done
           cd dist
-          sha256sum cfsync_${VERSION}_linux_*.tar.gz > checksums.txt
+          sha256sum cf_${VERSION}_linux_*.tar.gz > checksums.txt
 
       - name: Create or update GitHub Release
         shell: bash
@@ -85,10 +85,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          ASSETS=(dist/cfsync_*.tar.gz dist/checksums.txt)
+          ASSETS=(dist/cf_*.tar.gz dist/checksums.txt)
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           else
             gh release create "${TAG}" "${ASSETS[@]}" --verify-tag --generate-notes --title "${TAG}"
           fi
-

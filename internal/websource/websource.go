@@ -30,7 +30,7 @@ func NewClient() *Client {
 	return &Client{
 		HTTPClient: &http.Client{Timeout: 20 * time.Second},
 		URL:        config.SourceURL,
-		UserAgent:  "cfsync/1.0 (+https://github.com/pjy02/cf)",
+		UserAgent:  "cf/1.0 (+https://github.com/pjy02/cf)",
 	}
 }
 

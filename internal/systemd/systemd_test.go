@@ -6,8 +6,8 @@ import (
 )
 
 func TestRenderServiceQuotesBinaryPath(t *testing.T) {
-	unit := RenderService("/opt/cf sync/cfsync")
-	if !strings.Contains(unit, `ExecStart="/opt/cf sync/cfsync" sync --quiet`) {
+	unit := RenderService("/opt/cf sync/cf")
+	if !strings.Contains(unit, `ExecStart="/opt/cf sync/cf" sync --quiet`) {
 		t.Fatalf("binary path is not quoted: %s", unit)
 	}
 }

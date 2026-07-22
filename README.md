@@ -34,10 +34,12 @@ curl -fsSL https://raw.githubusercontent.com/pjy02/cf/main/install.sh | sudo CFS
 安装脚本从 GitHub Releases 下载对应架构的二进制并校验 SHA256。SSH 有可用 TTY 时会直接进入首次配置；无 TTY 时会安全退出交互流程，并提示稍后运行：
 
 ```bash
-sudo cfsync setup
-sudo cfsync install-service
-sudo cfsync sync
+sudo cf setup
+sudo cf install-service
+sudo cf sync
 ```
+
+主命令安装为 `/usr/local/bin/cf`。为兼容旧版本，安装器会在不覆盖其他程序的前提下创建 `/usr/local/bin/cfsync -> /usr/local/bin/cf`。如果 `cf` 已被 Cloud Foundry CLI 等其他程序占用，安装器会停止并提示处理，不会强制覆盖。
 
 ## Cloudflare Token
 
@@ -51,7 +53,7 @@ sudo cfsync sync
 ## SSH 面板
 
 ```bash
-sudo cfsync
+sudo cf
 ```
 
 菜单支持：
@@ -71,16 +73,16 @@ sudo cfsync
 
 ```bash
 # 打开面板
-sudo cfsync
+sudo cf
 
 # 只验证首页 HTML 和默认 85% 筛选，不访问 Cloudflare
-cfsync source
+cf source
 
 # 预览 DNS 变更
-sudo cfsync preview
+sudo cf preview
 
 # 立即同步
-sudo cfsync sync
+sudo cf sync
 
 # 查看定时器
 systemctl status cf-ip-sync.timer
@@ -89,7 +91,7 @@ systemctl status cf-ip-sync.timer
 journalctl -u cf-ip-sync.service -n 100 --no-pager
 
 # 卸载（默认保留 Cloudflare DNS）
-sudo cfsync uninstall
+sudo cf uninstall
 ```
 
 ## 数据处理规则
@@ -142,7 +144,8 @@ sudo cfsync uninstall
 ## 文件位置
 
 ```text
-/usr/local/bin/cfsync
+/usr/local/bin/cf
+/usr/local/bin/cfsync  # 指向 cf 的兼容软链接
 /etc/cf-ip-sync/config.json
 /var/lib/cf-ip-sync/state.json
 /etc/systemd/system/cf-ip-sync.service
@@ -154,7 +157,7 @@ sudo cfsync uninstall
 ## 卸载
 
 ```bash
-sudo cfsync uninstall
+sudo cf uninstall
 ```
 
 可选择：
@@ -170,8 +173,8 @@ sudo cfsync uninstall
 go test ./...
 go vet ./...
 
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/cfsync
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./cmd/cfsync
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o cf ./cmd/cfsync
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o cf ./cmd/cfsync
 ```
 
 Release 工作流从 GitHub Actions 手动运行，输入 `1.0.0` 或 `v1.0.0`，自动测试、交叉编译、生成校验文件并发布到 GitHub Releases。

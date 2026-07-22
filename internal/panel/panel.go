@@ -433,11 +433,32 @@ func (p *Panel) uninstall() (bool, error) {
 		_ = os.Remove(filepath.Dir(p.Service.Paths.State))
 	}
 	binary, _ := os.Executable()
+	removeCompatibilityAliases(binary)
 	if err := os.Remove(binary); err != nil {
 		return false, fmt.Errorf("删除程序 %s: %w", binary, err)
 	}
 	p.Console.Printf("卸载完成，Cloudflare DNS 记录已保留。\n")
 	return true, nil
+}
+
+func removeCompatibilityAliases(binary string) {
+	resolvedBinary, err := filepath.EvalSymlinks(binary)
+	if err != nil {
+		resolvedBinary = binary
+	}
+	for _, alias := range []string{"/usr/local/bin/cf", "/usr/local/bin/cfsync"} {
+		if alias == binary {
+			continue
+		}
+		info, err := os.Lstat(alias)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		resolvedAlias, err := filepath.EvalSymlinks(alias)
+		if err == nil && resolvedAlias == resolvedBinary {
+			_ = os.Remove(alias)
+		}
+	}
 }
 
 func (p *Panel) promptDefault(label, current string) (string, error) {

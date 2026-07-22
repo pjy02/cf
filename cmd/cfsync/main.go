@@ -87,27 +87,27 @@ func run() error {
 	case "uninstall":
 		return panel.RunUninstall(version)
 	case "version", "--version", "-v":
-		fmt.Printf("cfsync %s (commit %s, built %s)\n", version, commit, date)
+		fmt.Printf("cf %s (commit %s, built %s, github.com/pjy02/cf)\n", version, commit, date)
 		return nil
 	case "help", "--help", "-h":
 		printHelp()
 		return nil
 	default:
-		return fmt.Errorf("未知命令 %q，运行 cfsync help 查看帮助", command)
+		return fmt.Errorf("未知命令 %q，运行 cf help 查看帮助", command)
 	}
 }
 
 func printHelp() {
-	fmt.Print(`cfsync - Cloudflare 优选 IP 自动同步工具
+	fmt.Print(`cf - Cloudflare 优选 IP 自动同步工具
 
 用法：
-  cfsync                    打开 SSH 管理面板
-  cfsync setup              配置 Token、域名和前缀
-  cfsync sync               立即同步
-  cfsync preview            预览但不修改 DNS
-  cfsync source             只读取并检查网页 HTML，不访问 Cloudflare
-  cfsync install-service    安装或修复 systemd 定时器
-  cfsync uninstall          卸载工具（默认保留 DNS）
-  cfsync version            查看版本
+  cf                    打开 SSH 管理面板
+  cf setup              配置 Token、域名和前缀
+  cf sync               立即同步
+  cf preview            预览但不修改 DNS
+  cf source             只读取并检查网页 HTML，不访问 Cloudflare
+  cf install-service    安装或修复 systemd 定时器
+  cf uninstall          卸载工具（默认保留 DNS）
+  cf version            查看版本
 `)
 }
