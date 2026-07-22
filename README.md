@@ -16,6 +16,7 @@
 - Cloudflare 更新采用“先创建、后删除”的差异同步。
 - SSH 中文操作面板，可设置自动同步间隔和筛选规则。
 - systemd 定时执行，支持开机补跑和并发锁。
+- 面板和命令行可检查 GitHub 最新版本，并安全校验、安装和失败回滚。
 - 一键安装、更新覆盖和交互式卸载。
 - Linux `amd64`、`arm64` 预编译发布，服务器不需要 Go 环境。
 
@@ -28,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/pjy02/cf/main/install.sh | sudo bas
 指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pjy02/cf/main/install.sh | sudo CFSYNC_VERSION=1.0.0 bash
+curl -fsSL https://raw.githubusercontent.com/pjy02/cf/main/install.sh | sudo CF_VERSION=1.0.0 bash
 ```
 
 安装脚本从 GitHub Releases 下载对应架构的二进制并校验 SHA256。SSH 有可用 TTY 时会直接进入首次配置；无 TTY 时会安全退出交互流程，并提示稍后运行：
@@ -66,8 +67,9 @@ sudo cf
 6. 分别设置移动、联通、电信的借用策略。
 7. 查看历史网页缓存、降级状态和错误。
 8. 查看 systemd 日志。
-9. 安装或修复定时器。
-10. 卸载工具。
+9. 检查并安装最新版本。
+10. 安装或修复定时器。
+11. 卸载工具。
 
 ## 常用命令
 
@@ -89,6 +91,12 @@ systemctl status cf-ip-sync.timer
 
 # 查看日志
 journalctl -u cf-ip-sync.service -n 100 --no-pager
+
+# 只检查最新版本
+cf update --check
+
+# 检查并交互安装更新
+sudo cf update
 
 # 卸载（默认保留 Cloudflare DNS）
 sudo cf uninstall
@@ -140,6 +148,29 @@ sudo cf uninstall
   "ct": "auto"
 }
 ```
+
+## 检查与安装更新
+
+在 SSH 面板选择“检查更新”，或者运行：
+
+```bash
+# 只读取 GitHub 最新正式 Release，不修改本地文件
+cf update --check
+
+# 检查后输入 UPDATE 确认安装
+sudo cf update
+```
+
+更新程序会：
+
+1. 从 `pjy02/cf` 的最新正式 GitHub Release 获取版本和更新说明。
+2. 精确选择当前 Linux 架构的 `cf_版本_linux_amd64.tar.gz` 或 `cf_版本_linux_arm64.tar.gz`。
+3. 下载并验证 `checksums.txt`、Release SHA256 摘要和压缩包安全路径。
+4. 运行新程序的 `cf version`，确认仓库和版本一致。
+5. 备份当前程序为 `/usr/local/bin/cf.bak`，再原子替换 `/usr/local/bin/cf`。
+6. 替换后再次验证；验证失败自动恢复旧程序。
+
+更新不会修改 Cloudflare DNS、配置文件、状态缓存或 systemd 定时器。更新成功后重新运行 `cf` 即可。开发版本 `cf dev` 可以安装最新正式版本；若当前版本高于最新 Release，则不会自动降级。
 
 ## 文件位置
 

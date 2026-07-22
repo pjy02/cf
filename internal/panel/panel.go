@@ -18,6 +18,7 @@ import (
 	"github.com/pjy02/cf/internal/model"
 	"github.com/pjy02/cf/internal/state"
 	"github.com/pjy02/cf/internal/systemd"
+	"github.com/pjy02/cf/internal/updater"
 )
 
 type Panel struct {
@@ -51,12 +52,13 @@ func (p *Panel) Run(ctx context.Context) error {
 6. 设置各运营商借用策略
 7. 查看运行状态和缓存
 8. 查看最近日志
-9. 安装或修复 systemd 定时器
-10. 卸载工具
+9. 检查更新
+10. 安装或修复 systemd 定时器
+11. 卸载工具
 0. 退出
 
 `)
-		choice, err := p.Console.ReadLine("请选择 [0-10]：")
+		choice, err := p.Console.ReadLine("请选择 [0-11]：")
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
@@ -84,8 +86,16 @@ func (p *Panel) Run(ctx context.Context) error {
 		case "8":
 			p.showLogs()
 		case "9":
-			p.installService()
+			updated, updateErr := p.checkUpdate(ctx, false)
+			if updateErr != nil {
+				p.Console.Printf("\n检查更新失败：%v\n", updateErr)
+				p.Console.Pause()
+			} else if updated {
+				return nil
+			}
 		case "10":
+			p.installService()
+		case "11":
 			removed, removeErr := p.uninstall()
 			if removeErr != nil {
 				p.Console.Printf("\n卸载失败：%v\n", removeErr)
@@ -402,6 +412,64 @@ func (p *Panel) installService() {
 	p.Console.Pause()
 }
 
+func (p *Panel) checkUpdate(ctx context.Context, checkOnly bool) (bool, error) {
+	p.Console.Printf("\n正在检查 GitHub 最新版本...\n")
+	client := updater.NewClient()
+	info, err := client.Check(ctx, p.Version)
+	if err != nil {
+		return false, err
+	}
+	p.Console.Printf("\n━━━━━━━━ 检查更新 ━━━━━━━━\n")
+	p.Console.Printf("当前版本：%s\n", info.CurrentVersion)
+	p.Console.Printf("最新版本：%s\n", info.LatestVersion)
+	if !info.Release.PublishedAt.IsZero() {
+		p.Console.Printf("发布时间：%s\n", info.Release.PublishedAt.Local().Format("2006-01-02 15:04:05"))
+	}
+	if info.Release.HTMLURL != "" {
+		p.Console.Printf("更新地址：%s\n", updater.CleanReleaseNotes(info.Release.HTMLURL, 500))
+	}
+	if info.Development {
+		p.Console.Printf("状态：当前是开发版本，可安装最新正式版本。\n")
+	} else if info.Ahead {
+		p.Console.Printf("状态：当前版本高于最新正式版本，不执行降级。\n")
+	} else if !info.UpdateAvailable {
+		p.Console.Printf("状态：当前已经是最新版本。\n")
+	} else {
+		p.Console.Printf("状态：发现可用更新。\n")
+	}
+	p.Console.Printf("\n更新内容：\n%s\n", updater.CleanReleaseNotes(info.Release.Body, 2000))
+	if checkOnly || !info.UpdateAvailable || info.Ahead {
+		return false, nil
+	}
+	if runtime.GOOS != "linux" {
+		return false, fmt.Errorf("自动安装更新仅支持 Linux")
+	}
+	choice, err := p.Console.ReadLine("\n输入 UPDATE 确认下载并安装，直接回车取消：")
+	if err != nil {
+		return false, err
+	}
+	if choice != "UPDATE" {
+		p.Console.Printf("已取消更新。\n")
+		return false, nil
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return false, err
+	}
+	p.Console.Printf("正在下载、校验并安装 %s...\n", info.LatestVersion)
+	if err := client.Install(ctx, info, executable); err != nil {
+		var warning *updater.CleanupWarning
+		if !errors.As(err, &warning) {
+			return false, err
+		}
+		p.Console.Printf("警告：%v\n", warning)
+	}
+	p.Console.Printf("\n更新成功：%s → %s\n", info.CurrentVersion, info.LatestVersion)
+	p.Console.Printf("请重新运行 cf 进入新版本。\n")
+	p.Console.Pause()
+	return true, nil
+}
+
 func (p *Panel) uninstall() (bool, error) {
 	p.Console.Printf("\n卸载不会删除 Cloudflare 上现有 DNS 记录。\n")
 	p.Console.Printf("1. 卸载程序，保留配置和缓存\n2. 完全卸载本地文件\n0. 取消\n")
@@ -495,6 +563,13 @@ func RunUninstall(version string) error {
 	p := New(version)
 	defer p.Close()
 	_, err := p.uninstall()
+	return err
+}
+
+func RunUpdate(version string, checkOnly bool) error {
+	p := New(version)
+	defer p.Close()
+	_, err := p.checkUpdate(context.Background(), checkOnly)
 	return err
 }
 

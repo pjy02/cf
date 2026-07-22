@@ -61,6 +61,13 @@ func run() error {
 		return err
 	case "install-service":
 		return panel.InstallServiceFromConfig(app.DefaultPaths())
+	case "update":
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		checkOnly := flags.Bool("check", false, "only check for updates")
+		if err := flags.Parse(os.Args[2:]); err != nil {
+			return err
+		}
+		return panel.RunUpdate(version, *checkOnly)
 	case "source":
 		data, err := websource.NewClient().Fetch(ctx)
 		if err != nil {
@@ -106,6 +113,8 @@ func printHelp() {
   cf sync               立即同步
   cf preview            预览但不修改 DNS
   cf source             只读取并检查网页 HTML，不访问 Cloudflare
+  cf update --check     只检查最新版本
+  cf update             检查并交互安装更新
   cf install-service    安装或修复 systemd 定时器
   cf uninstall          卸载工具（默认保留 DNS）
   cf version            查看版本

@@ -31,7 +31,7 @@ case "$(uname -m)" in
   *) die "不支持的 CPU 架构：$(uname -m)" ;;
 esac
 
-VERSION="${CFSYNC_VERSION:-}"
+VERSION="${CF_VERSION:-${CFSYNC_VERSION:-}}"
 if [[ -z "${VERSION}" ]]; then
   LATEST_URL="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
   TAG="${LATEST_URL##*/}"
@@ -39,7 +39,7 @@ if [[ -z "${VERSION}" ]]; then
   VERSION="${TAG#v}"
 else
   VERSION="${VERSION#v}"
-  [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "CFSYNC_VERSION 必须是 1.2.3 格式"
+  [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "CF_VERSION 必须是 1.2.3 格式"
   TAG="v${VERSION}"
 fi
 
