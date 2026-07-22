@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pjy02/cf/internal/config"
 	"github.com/pjy02/cf/internal/model"
 	"github.com/pjy02/cf/internal/selector"
 	"github.com/pjy02/cf/internal/state"
@@ -27,7 +28,7 @@ type Target struct {
 	Donor  string
 }
 
-func Build(data model.SourceData, cache *state.State, existing map[string][]string, ratio float64, limit int, cacheMaxAge time.Duration, now time.Time) map[string]Target {
+func Build(data model.SourceData, cache *state.State, existing map[string][]string, strategies map[string]string, ratio float64, limit int, cacheMaxAge time.Duration, now time.Time) map[string]Target {
 	current := make(map[string][]model.Node)
 	for _, carrier := range model.CarrierOrder {
 		snapshot, ok := data.Carriers[carrier]
@@ -48,6 +49,17 @@ func Build(data model.SourceData, cache *state.State, existing map[string][]stri
 			targets[carrier] = Target{Nodes: nodes, Mode: ModeRealtime, Detail: sourceDetail(data.Carriers[carrier].SourceTime)}
 			continue
 		}
+
+		strategy := strategies[carrier]
+		if strategy == "" {
+			strategy = config.FallbackAuto
+		}
+		if donor, nodes := currentForStrategy(data, current, carrier, strategy); len(nodes) > 0 {
+			detail := fmt.Sprintf("临时借用%s本轮网页结果（策略：%s）", model.CarrierNames[donor], strategyLabel(strategy))
+			targets[carrier] = Target{Nodes: nodes, Mode: ModeBorrowed, Donor: donor, Detail: detail}
+			continue
+		}
+
 		if entry, ok := cache.Carriers[carrier]; ok {
 			nodes := selector.Select(entry.Nodes, ratio, limit)
 			if len(nodes) > 0 {
@@ -60,21 +72,60 @@ func Build(data model.SourceData, cache *state.State, existing map[string][]stri
 				continue
 			}
 		}
+		if donor, nodes := cacheForStrategy(cache, carrier, strategy, ratio, limit); len(nodes) > 0 {
+			targets[carrier] = Target{Nodes: nodes, Mode: ModeBorrowed, Donor: donor, Detail: fmt.Sprintf("临时借用%s历史网页结果（策略：%s）", model.CarrierNames[donor], strategyLabel(strategy))}
+			continue
+		}
 		if nodes := existingNodes(existing[carrier], carrier, limit); len(nodes) > 0 {
-			targets[carrier] = Target{Nodes: nodes, Mode: ModeRetained, Detail: "保留 Cloudflare 当前有效 A 记录"}
-			continue
-		}
-		if donor, nodes := newestCurrent(data, current, carrier); len(nodes) > 0 {
-			targets[carrier] = Target{Nodes: nodes, Mode: ModeBorrowed, Donor: donor, Detail: fmt.Sprintf("临时借用%s本轮网页结果", model.CarrierNames[donor])}
-			continue
-		}
-		if donor, nodes := newestCache(cache, carrier, ratio, limit); len(nodes) > 0 {
-			targets[carrier] = Target{Nodes: nodes, Mode: ModeBorrowed, Donor: donor, Detail: fmt.Sprintf("临时借用%s历史网页结果", model.CarrierNames[donor])}
+			targets[carrier] = Target{Nodes: nodes, Mode: ModeRetained, Detail: "没有可用网页结果，保留 Cloudflare 当前有效 A 记录"}
 			continue
 		}
 		targets[carrier] = Target{Mode: ModeMissing, Detail: "没有任何可靠 IP，跳过该域名修改"}
 	}
 	return targets
+}
+
+func currentForStrategy(data model.SourceData, current map[string][]model.Node, carrier, strategy string) (string, []model.Node) {
+	switch strategy {
+	case config.FallbackOff:
+		return "", nil
+	case config.FallbackAuto:
+		return newestCurrent(data, current, carrier)
+	default:
+		if strategy == carrier {
+			return "", nil
+		}
+		return strategy, cloneForCarrier(current[strategy], carrier)
+	}
+}
+
+func cacheForStrategy(cache *state.State, carrier, strategy string, ratio float64, limit int) (string, []model.Node) {
+	switch strategy {
+	case config.FallbackOff:
+		return "", nil
+	case config.FallbackAuto:
+		return newestCache(cache, carrier, ratio, limit)
+	default:
+		if strategy == carrier {
+			return "", nil
+		}
+		entry, ok := cache.Carriers[strategy]
+		if !ok {
+			return "", nil
+		}
+		return strategy, cloneForCarrier(selector.Select(entry.Nodes, ratio, limit), carrier)
+	}
+}
+
+func strategyLabel(strategy string) string {
+	switch strategy {
+	case config.FallbackAuto:
+		return "自动选择"
+	case config.FallbackOff:
+		return "禁止借用"
+	default:
+		return "固定" + model.CarrierNames[strategy]
+	}
 }
 
 func existingNodes(ips []string, carrier string, limit int) []model.Node {
@@ -106,7 +157,15 @@ func newestCurrent(data model.SourceData, current map[string][]model.Node, exclu
 		}
 		candidates = append(candidates, candidate{carrier: carrier, time: t, nodes: nodes})
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].time.After(candidates[j].time) })
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if !candidates[i].time.Equal(candidates[j].time) {
+			return candidates[i].time.After(candidates[j].time)
+		}
+		if candidates[i].nodes[0].Speed != candidates[j].nodes[0].Speed {
+			return candidates[i].nodes[0].Speed > candidates[j].nodes[0].Speed
+		}
+		return candidates[i].carrier < candidates[j].carrier
+	})
 	if len(candidates) == 0 {
 		return "", nil
 	}
@@ -129,7 +188,15 @@ func newestCache(cache *state.State, excluded string, ratio float64, limit int) 
 			candidates = append(candidates, candidate{carrier: carrier, time: entry.FetchedAt, nodes: nodes})
 		}
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].time.After(candidates[j].time) })
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if !candidates[i].time.Equal(candidates[j].time) {
+			return candidates[i].time.After(candidates[j].time)
+		}
+		if candidates[i].nodes[0].Speed != candidates[j].nodes[0].Speed {
+			return candidates[i].nodes[0].Speed > candidates[j].nodes[0].Speed
+		}
+		return candidates[i].carrier < candidates[j].carrier
+	})
 	if len(candidates) == 0 {
 		return "", nil
 	}

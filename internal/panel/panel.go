@@ -48,14 +48,15 @@ func (p *Panel) Run(ctx context.Context) error {
 3. 设置 Cloudflare Token、域名和前缀
 4. 设置自动同步间隔
 5. 设置筛选规则
-6. 查看运行状态和缓存
-7. 查看最近日志
-8. 安装或修复 systemd 定时器
-9. 卸载工具
+6. 设置各运营商借用策略
+7. 查看运行状态和缓存
+8. 查看最近日志
+9. 安装或修复 systemd 定时器
+10. 卸载工具
 0. 退出
 
 `)
-		choice, err := p.Console.ReadLine("请选择 [0-9]：")
+		choice, err := p.Console.ReadLine("请选择 [0-10]：")
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
@@ -77,12 +78,14 @@ func (p *Panel) Run(ctx context.Context) error {
 		case "5":
 			p.setSelection()
 		case "6":
-			p.showStatus()
+			p.setFallback()
 		case "7":
-			p.showLogs()
+			p.showStatus()
 		case "8":
-			p.installService()
+			p.showLogs()
 		case "9":
+			p.installService()
+		case "10":
 			removed, removeErr := p.uninstall()
 			if removeErr != nil {
 				p.Console.Printf("\n卸载失败：%v\n", removeErr)
@@ -192,6 +195,10 @@ func (p *Panel) drawHeader() {
 		return
 	}
 	p.Console.Printf("目标域名：%s｜间隔：%s｜最多：%d 个｜速度比例：%.0f%%\n", cfg.Zone, cfg.Interval, cfg.MaxRecords, cfg.SpeedRatio*100)
+	p.Console.Printf("借用策略：移动=%s｜联通=%s｜电信=%s\n",
+		fallbackDescription(cfg.Fallback[model.CarrierCM]),
+		fallbackDescription(cfg.Fallback[model.CarrierCU]),
+		fallbackDescription(cfg.Fallback[model.CarrierCT]))
 	if runtime.GOOS == "linux" {
 		p.Console.Printf("定时器：%s\n", systemd.TimerStatus())
 	}
@@ -275,6 +282,70 @@ func (p *Panel) setSelection() {
 		p.Console.Printf("\n筛选规则已保存。\n")
 	}
 	p.Console.Pause()
+}
+
+func (p *Panel) setFallback() {
+	cfg, err := config.Load(p.Service.Paths.Config)
+	if err != nil {
+		p.Console.Printf("\n%v\n", err)
+		p.Console.Pause()
+		return
+	}
+	for _, carrier := range model.CarrierOrder {
+		others := otherCarriers(carrier)
+		p.Console.Printf("\n%s无网页数据时，当前策略：%s\n", model.CarrierNames[carrier], fallbackDescription(cfg.Fallback[carrier]))
+		p.Console.Printf("  1. 自动选择本轮更新时间最新的运营商\n")
+		p.Console.Printf("  2. 固定借用%s\n", model.CarrierNames[others[0]])
+		p.Console.Printf("  3. 固定借用%s\n", model.CarrierNames[others[1]])
+		p.Console.Printf("  4. 禁止跨运营商借用\n")
+		choice, readErr := p.Console.ReadLine("请选择 [1-4]，直接回车保持不变：")
+		if readErr != nil {
+			return
+		}
+		switch choice {
+		case "":
+		case "1":
+			cfg.Fallback[carrier] = config.FallbackAuto
+		case "2":
+			cfg.Fallback[carrier] = others[0]
+		case "3":
+			cfg.Fallback[carrier] = others[1]
+		case "4":
+			cfg.Fallback[carrier] = config.FallbackOff
+		default:
+			p.Console.Printf("无效选项，%s策略保持不变。\n", model.CarrierNames[carrier])
+		}
+	}
+	if err := config.Save(p.Service.Paths.Config, cfg); err != nil {
+		p.Console.Printf("\n保存失败：%v\n", err)
+	} else {
+		p.Console.Printf("\n三个运营商的借用策略已保存，下次同步立即生效。\n")
+	}
+	p.Console.Pause()
+}
+
+func otherCarriers(carrier string) []string {
+	result := make([]string, 0, 2)
+	for _, candidate := range model.CarrierOrder {
+		if candidate != carrier {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func fallbackDescription(strategy string) string {
+	switch strategy {
+	case config.FallbackOff:
+		return "禁止借用"
+	case config.FallbackAuto, "":
+		return "自动"
+	default:
+		if name, ok := model.CarrierNames[strategy]; ok {
+			return "固定" + name
+		}
+		return "未知"
+	}
 }
 
 func (p *Panel) showStatus() {

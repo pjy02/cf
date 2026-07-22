@@ -14,7 +14,11 @@ import (
 	"github.com/pjy02/cf/internal/model"
 )
 
-const SourceURL = "https://ip.v2too.top/"
+const (
+	SourceURL    = "https://ip.v2too.top/"
+	FallbackAuto = "auto"
+	FallbackOff  = "off"
+)
 
 type Config struct {
 	Zone        string            `json:"zone"`
@@ -26,6 +30,7 @@ type Config struct {
 	Interval    string            `json:"interval"`
 	CacheMaxAge string            `json:"cache_max_age"`
 	Prefixes    map[string]string `json:"prefixes"`
+	Fallback    map[string]string `json:"fallback"`
 }
 
 func Default() Config {
@@ -39,6 +44,11 @@ func Default() Config {
 			model.CarrierCM: "cmcc",
 			model.CarrierCU: "cucc",
 			model.CarrierCT: "ctcc",
+		},
+		Fallback: map[string]string{
+			model.CarrierCM: FallbackAuto,
+			model.CarrierCU: FallbackAuto,
+			model.CarrierCT: FallbackAuto,
 		},
 	}
 }
@@ -129,6 +139,15 @@ func (c Config) Validate() error {
 			return errors.New("三个运营商的域名前缀不能重复")
 		}
 		seen[prefix] = true
+		strategy := c.Fallback[carrier]
+		if strategy != FallbackAuto && strategy != FallbackOff {
+			if _, ok := model.CarrierNames[strategy]; !ok {
+				return fmt.Errorf("%s 的借用策略无效", model.CarrierNames[carrier])
+			}
+			if strategy == carrier {
+				return fmt.Errorf("%s 不能借用自身结果", model.CarrierNames[carrier])
+			}
+		}
 	}
 	return nil
 }
@@ -153,6 +172,16 @@ func (c *Config) normalize() {
 	c.Interval = strings.ToLower(strings.TrimSpace(c.Interval))
 	for carrier, prefix := range c.Prefixes {
 		c.Prefixes[carrier] = strings.ToLower(strings.TrimSpace(prefix))
+	}
+	if c.Fallback == nil {
+		c.Fallback = make(map[string]string)
+	}
+	for _, carrier := range model.CarrierOrder {
+		strategy := strings.ToLower(strings.TrimSpace(c.Fallback[carrier]))
+		if strategy == "" {
+			strategy = FallbackAuto
+		}
+		c.Fallback[carrier] = strategy
 	}
 }
 

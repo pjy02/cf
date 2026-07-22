@@ -124,7 +124,7 @@ func (s *Service) Run(ctx context.Context, dryRun bool) (Report, error) {
 	}
 	cacheAge, _ := time.ParseDuration(cfg.CacheMaxAge)
 	now := s.Now()
-	report.Targets = fallback.Build(data, &cache, existingIPs, cfg.SpeedRatio, cfg.MaxRecords, cacheAge, now)
+	report.Targets = fallback.Build(data, &cache, existingIPs, cfg.Fallback, cfg.SpeedRatio, cfg.MaxRecords, cacheAge, now)
 
 	var syncErrors []error
 	for _, carrier := range model.CarrierOrder {
